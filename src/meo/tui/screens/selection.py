@@ -1,4 +1,4 @@
-"""Selection screen - Step 1: Mark chunks using minimal keyboard interface"""
+"""Selection screen - Mark chunks with inline direction assignment"""
 
 from enum import Enum
 from pathlib import Path
@@ -8,16 +8,19 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Static, TextArea, Footer, ListView, ListItem, Label
+from textual.widgets import Static, TextArea, Footer, ListView, ListItem, Label, Input
 
 from meo.models.project import ProjectState
 from meo.models.chunk import Chunk, ChunkCategory, TextRange, Location
+from meo.presets import BUILTIN_PRESETS
 
 
 class SelectionMode(Enum):
     """State machine for selection screen"""
-    EDITING = "editing"  # Focus on TextArea, normal navigation
-    SELECTING_CATEGORY = "selecting_category"  # Focus on sidebar category list
+    EDITING = "editing"
+    SELECTING_CATEGORY = "selecting_category"
+    SELECTING_DIRECTION = "selecting_direction"
+    ENTERING_ANNOTATION = "entering_annotation"
 
 
 class CategoryListItem(ListItem):
@@ -30,6 +33,19 @@ class CategoryListItem(ListItem):
     def compose(self) -> ComposeResult:
         display_name = self.category.value.replace("_", " ").title()
         yield Label(display_name)
+
+
+class DirectionListItem(ListItem):
+    """A list item representing a direction preset"""
+
+    def __init__(self, preset_id: str, preset_name: str, preset_desc: str):
+        super().__init__()
+        self.preset_id = preset_id
+        self.preset_name = preset_name
+        self.preset_desc = preset_desc
+
+    def compose(self) -> ComposeResult:
+        yield Label(f"[bold]{self.preset_name}[/bold] - {self.preset_desc}")
 
 
 class ChunkListItem(ListItem):
@@ -47,25 +63,29 @@ class ChunkListItem(ListItem):
             ChunkCategory.LEAVE_ALONE: "dim",
         }
         color = category_colors.get(self.chunk.category, "white")
-        preview = self.chunk.original_text[:25].replace("\n", " ")
-        if len(self.chunk.original_text) > 25:
+        preview = self.chunk.original_text[:20].replace("\n", " ")
+        if len(self.chunk.original_text) > 20:
             preview += "..."
-        yield Label(f"[{color}]{self.chunk.id}[/] [{self.chunk.category.value}]\n{preview}")
+        direction = self.chunk.direction_preset or "none"
+        yield Label(f"[{color}]{self.chunk.id}[/] [{direction}]\n{preview}")
 
 
 class SelectionScreen(Screen):
-    """Screen for selecting and marking chunks with minimal keyboard interface.
+    """Screen for selecting and marking chunks with inline directions.
+
+    Flow: Select text → Enter → Category → Enter → Direction → Enter → Annotation → Enter
 
     Controls:
-    - Arrow keys: Navigate cursor in text
+    - Arrow keys: Navigate cursor/lists
     - Shift+Arrow: Extend selection
-    - Enter: Mark chunk (with selection) or confirm category
-    - Escape: Cancel pending chunk creation
-    - n: Move to next step (directions)
+    - Enter: Confirm current step
+    - Escape: Cancel/go back
+    - g: Generate atomic files
+    - q: Quit
     """
 
     BINDINGS = [
-        Binding("n", "next_step", "Next Step"),
+        Binding("g", "generate", "Generate"),
     ]
 
     def __init__(self, source_file: Path, content: str, state: ProjectState):
@@ -77,9 +97,9 @@ class SelectionScreen(Screen):
         self.pending_chunk: Optional[Chunk] = None
 
     def compose(self) -> ComposeResult:
-        yield Static(f"[bold]MEO - Selection[/bold]  |  {self.source_file.name}", classes="title")
+        yield Static(f"[bold]MEO[/bold]  |  {self.source_file.name}", classes="title")
         yield Static(
-            "[dim]Select text[/] → [dim]Enter[/] → [dim]Pick category[/] → [dim]Enter[/]  |  [dim]n[/]=next step",
+            "[dim]Select[/] → Enter → Category → Direction → Annotation  |  [dim]g[/]=generate  [dim]q[/]=quit",
             classes="help-text",
         )
 
@@ -89,8 +109,17 @@ class SelectionScreen(Screen):
 
             with Vertical(id="sidebar"):
                 # Category selector (hidden by default)
-                yield Static("[bold]Select Category[/bold]", id="category-header", classes="hidden")
+                yield Static("[bold]Category[/bold]", id="category-header", classes="hidden")
                 yield ListView(id="category-list", classes="hidden")
+
+                # Direction selector (hidden by default)
+                yield Static("[bold]Direction[/bold]", id="direction-header", classes="hidden")
+                yield ListView(id="direction-list", classes="hidden")
+
+                # Annotation input (hidden by default)
+                yield Static("[bold]Annotation[/bold] (Enter to skip)", id="annotation-header", classes="hidden")
+                yield Input(placeholder="Optional note...", id="annotation-input", classes="hidden")
+
                 # Chunk list (visible by default)
                 yield Static("[bold]Chunks[/bold]", id="chunks-header")
                 yield ListView(id="chunks-listview")
@@ -103,6 +132,11 @@ class SelectionScreen(Screen):
         category_list = self.query_one("#category-list", ListView)
         for cat in ChunkCategory:
             category_list.append(CategoryListItem(cat))
+
+        # Populate direction list
+        direction_list = self.query_one("#direction-list", ListView)
+        for preset in BUILTIN_PRESETS:
+            direction_list.append(DirectionListItem(preset.id, preset.name, preset.description))
 
         # Refresh chunk list
         self._refresh_chunk_list()
@@ -126,7 +160,6 @@ class SelectionScreen(Screen):
         if selection.start == selection.end:
             return None
 
-        # Normalize selection (start before end)
         start = min(selection.start, selection.end)
         end = max(selection.start, selection.end)
 
@@ -140,6 +173,48 @@ class SelectionScreen(Screen):
         editor = self.query_one("#editor", TextArea)
         return editor.selected_text
 
+    # ========== Sidebar Visibility Helpers ==========
+
+    def _hide_all_sidebar_panels(self) -> None:
+        """Hide all sidebar panels"""
+        for widget_id in ["category-header", "category-list", "direction-header",
+                          "direction-list", "annotation-header", "annotation-input",
+                          "chunks-header", "chunks-listview"]:
+            self.query_one(f"#{widget_id}").add_class("hidden")
+
+    def _show_chunks_panel(self) -> None:
+        """Show the chunks panel"""
+        self._hide_all_sidebar_panels()
+        self.query_one("#chunks-header").remove_class("hidden")
+        self.query_one("#chunks-listview").remove_class("hidden")
+
+    def _show_category_panel(self) -> None:
+        """Show category selector"""
+        self._hide_all_sidebar_panels()
+        self.query_one("#category-header").remove_class("hidden")
+        category_list = self.query_one("#category-list", ListView)
+        category_list.remove_class("hidden")
+        category_list.index = 0
+        category_list.focus()
+
+    def _show_direction_panel(self) -> None:
+        """Show direction selector"""
+        self._hide_all_sidebar_panels()
+        self.query_one("#direction-header").remove_class("hidden")
+        direction_list = self.query_one("#direction-list", ListView)
+        direction_list.remove_class("hidden")
+        direction_list.index = 0
+        direction_list.focus()
+
+    def _show_annotation_panel(self) -> None:
+        """Show annotation input"""
+        self._hide_all_sidebar_panels()
+        self.query_one("#annotation-header").remove_class("hidden")
+        annotation_input = self.query_one("#annotation-input", Input)
+        annotation_input.remove_class("hidden")
+        annotation_input.value = ""
+        annotation_input.focus()
+
     # ========== Enter Key Handling ==========
 
     def key_enter(self) -> None:
@@ -148,6 +223,10 @@ class SelectionScreen(Screen):
             self._start_chunk_creation()
         elif self.mode == SelectionMode.SELECTING_CATEGORY:
             self._confirm_category()
+        elif self.mode == SelectionMode.SELECTING_DIRECTION:
+            self._confirm_direction()
+        elif self.mode == SelectionMode.ENTERING_ANNOTATION:
+            self._confirm_annotation()
 
     def _start_chunk_creation(self) -> None:
         """Create pending chunk and switch to category selection mode"""
@@ -167,111 +246,110 @@ class SelectionScreen(Screen):
                 self.notify(f"Overlaps with {existing.id}", severity="error")
                 return
 
-        # Create pending chunk (not yet added to state)
+        # Create pending chunk
         self.pending_chunk = Chunk(
             id=self.state.next_chunk_id(),
             range=text_range,
-            category=ChunkCategory.EDIT,  # default, will be changed
+            category=ChunkCategory.EDIT,
             original_text=selected_text,
         )
 
-        # Switch to category selection mode
         self.mode = SelectionMode.SELECTING_CATEGORY
-        self._show_category_selector()
-
-    def _show_category_selector(self) -> None:
-        """Show category list and focus it"""
-        category_header = self.query_one("#category-header", Static)
-        category_list = self.query_one("#category-list", ListView)
-        chunks_header = self.query_one("#chunks-header", Static)
-        chunks_listview = self.query_one("#chunks-listview", ListView)
-
-        # Show category selector
-        category_header.remove_class("hidden")
-        category_list.remove_class("hidden")
-
-        # Hide chunk list
-        chunks_header.add_class("hidden")
-        chunks_listview.add_class("hidden")
-
-        # Focus category list and select first item
-        category_list.index = 0
-        category_list.focus()
+        self._show_category_panel()
 
     def _confirm_category(self) -> None:
-        """Confirm selected category and finalize chunk"""
+        """Confirm category and move to direction selection"""
         category_list = self.query_one("#category-list", ListView)
-        selected_index = category_list.index
-
-        if selected_index is None:
-            selected_index = 0
+        selected_index = category_list.index or 0
 
         categories = list(ChunkCategory)
         self.pending_chunk.category = categories[selected_index]
 
-        # Add to state
+        # Move to direction selection
+        self.mode = SelectionMode.SELECTING_DIRECTION
+        self._show_direction_panel()
+
+    def _confirm_direction(self) -> None:
+        """Confirm direction and move to annotation"""
+        direction_list = self.query_one("#direction-list", ListView)
+        selected_index = direction_list.index or 0
+
+        if selected_index < len(BUILTIN_PRESETS):
+            self.pending_chunk.direction_preset = BUILTIN_PRESETS[selected_index].id
+
+        # Move to annotation
+        self.mode = SelectionMode.ENTERING_ANNOTATION
+        self._show_annotation_panel()
+
+    def _confirm_annotation(self) -> None:
+        """Confirm annotation and finalize chunk"""
+        annotation_input = self.query_one("#annotation-input", Input)
+        annotation = annotation_input.value.strip()
+
+        if annotation:
+            self.pending_chunk.annotation = annotation
+
+        # Finalize chunk
         self.state.chunks.append(self.pending_chunk)
         chunk_id = self.pending_chunk.id
         self.pending_chunk = None
 
-        # Switch back to editing mode
+        # Return to editing
         self.mode = SelectionMode.EDITING
-        self._hide_category_selector()
+        self._show_chunks_panel()
         self._refresh_chunk_list()
-        self.notify(f"Created {chunk_id}")
 
-    def _hide_category_selector(self) -> None:
-        """Hide category selector and return to chunk list"""
-        category_header = self.query_one("#category-header", Static)
-        category_list = self.query_one("#category-list", ListView)
-        chunks_header = self.query_one("#chunks-header", Static)
-        chunks_listview = self.query_one("#chunks-listview", ListView)
-
-        # Hide category selector
-        category_header.add_class("hidden")
-        category_list.add_class("hidden")
-
-        # Show chunk list
-        chunks_header.remove_class("hidden")
-        chunks_listview.remove_class("hidden")
-
-        # Return focus to editor
         editor = self.query_one("#editor", TextArea)
         editor.focus()
+
+        self.notify(f"Created {chunk_id}")
 
     # ========== Escape Key Handling ==========
 
     def key_escape(self) -> None:
-        """Handle Escape key - cancel pending chunk or quit"""
+        """Handle Escape key - go back one step or cancel"""
         if self.mode == SelectionMode.SELECTING_CATEGORY:
             self._cancel_chunk_creation()
-        # In editing mode, escape does nothing (use 'q' to quit via app)
+        elif self.mode == SelectionMode.SELECTING_DIRECTION:
+            # Go back to category
+            self.mode = SelectionMode.SELECTING_CATEGORY
+            self._show_category_panel()
+        elif self.mode == SelectionMode.ENTERING_ANNOTATION:
+            # Go back to direction
+            self.mode = SelectionMode.SELECTING_DIRECTION
+            self._show_direction_panel()
 
     def _cancel_chunk_creation(self) -> None:
         """Cancel pending chunk and return to editing"""
         self.pending_chunk = None
         self.mode = SelectionMode.EDITING
-        self._hide_category_selector()
+        self._show_chunks_panel()
+
+        editor = self.query_one("#editor", TextArea)
+        editor.focus()
+
         self.notify("Cancelled")
 
-    # ========== Navigation Actions ==========
+    # ========== Generate Action ==========
 
-    def action_next_step(self) -> None:
-        """Move to directions screen"""
-        if self.mode == SelectionMode.SELECTING_CATEGORY:
-            self.notify("Finish selecting category first", severity="warning")
+    def action_generate(self) -> None:
+        """Generate atomic files for all chunks"""
+        if self.mode != SelectionMode.EDITING:
+            self.notify("Finish current chunk first", severity="warning")
             return
 
-        chunks_needing_direction = self.state.get_chunks_needing_direction()
-        if not chunks_needing_direction:
-            self.notify("No chunks marked for editing", severity="warning")
+        if not self.state.chunks:
+            self.notify("No chunks defined", severity="warning")
             return
 
-        # Assign execution order
-        for i, chunk in enumerate(chunks_needing_direction, 1):
-            chunk.execution_order = i
+        # Import here to avoid circular imports
+        from meo.core.session import create_session
 
-        self.app.go_to_directions()
+        try:
+            session = create_session(self.source_file, self.state)
+            self.app.exit(message=f"Session created: .meo/sessions/{session.id}")
+        except Exception as e:
+            self.notify(f"Error: {e}", severity="error")
 
     # ========== Chunk List Interaction ==========
 
@@ -280,6 +358,5 @@ class SelectionScreen(Screen):
         if self.mode == SelectionMode.EDITING and isinstance(event.item, ChunkListItem):
             chunk = event.item.chunk
             editor = self.query_one("#editor", TextArea)
-            # Move cursor to chunk start
             editor.cursor_location = (chunk.range.start.row, chunk.range.start.col)
             editor.focus()
