@@ -87,6 +87,7 @@ class SelectionScreen(Screen):
 
     BINDINGS = [
         Binding("g", "generate", "Generate"),
+        Binding("d", "delete_chunk", "Delete Chunk"),
     ]
 
     def __init__(self, source_file: Path, content: str, state: ProjectState):
@@ -100,7 +101,7 @@ class SelectionScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Static(f"[bold]MEO[/bold]  |  {self.source_file.name}", classes="title")
         yield Static(
-            "[dim]Select[/] → Enter → Category → Direction → Annotation  |  [dim]g[/]=generate  [dim]q[/]=quit",
+            "[dim]Select[/] → Enter → Category → Direction → Annotation  |  [dim]g[/]=generate  [dim]d[/]=delete  [dim]q[/]=quit",
             classes="help-text",
         )
 
@@ -351,6 +352,31 @@ class SelectionScreen(Screen):
                 self.app.generate_edit_and_review()
 
         self.app.push_screen(GenerateConfirmModal(chunk_ids), handle_confirm)
+
+    # ========== Delete Chunk ==========
+
+    def action_delete_chunk(self) -> None:
+        """Delete the selected chunk from the list"""
+        if self.mode != SelectionMode.EDITING:
+            self.notify("Finish current chunk first", severity="warning")
+            return
+
+        if not self.state.chunks:
+            self.notify("No chunks to delete", severity="warning")
+            return
+
+        listview = self.query_one("#chunks-listview", ListView)
+        if listview.index is None:
+            self.notify("Select a chunk first", severity="warning")
+            return
+
+        selected_index = listview.index
+        if 0 <= selected_index < len(self.state.chunks):
+            chunk = self.state.chunks[selected_index]
+            chunk_id = chunk.id
+            self.state.chunks.pop(selected_index)
+            self._refresh_chunk_list()
+            self.notify(f"Deleted {chunk_id}")
 
     # ========== Chunk List Interaction ==========
 
