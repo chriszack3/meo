@@ -80,6 +80,50 @@ class MeoApp(App):
         background: $primary;
         color: $text;
     }
+
+    /* Hidden elements */
+    .hidden {
+        display: none;
+    }
+
+    /* Sidebar styling */
+    #sidebar {
+        width: 30;
+        border: solid $primary;
+        padding: 1;
+    }
+
+    /* Category selector */
+    #category-header {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    #category-list {
+        height: auto;
+        max-height: 10;
+        border: solid $accent;
+        margin-bottom: 1;
+    }
+
+    #category-list > ListItem {
+        padding: 0 1;
+    }
+
+    #category-list > ListItem:hover {
+        background: $primary 30%;
+    }
+
+    #category-list:focus > ListItem.-highlight {
+        background: $accent;
+    }
+
+    /* Chunks header */
+    #chunks-header {
+        text-style: bold;
+        margin-bottom: 1;
+    }
     """
 
     BINDINGS = [

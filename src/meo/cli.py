@@ -103,10 +103,35 @@ def _run_file_picker():
     selected_file = app_instance.run()
 
     if selected_file:
-        console.print(f"[green]Selected:[/green] {selected_file}")
-        # Placeholder for next phase - will launch selection screen here
+        # Launch the main MEO app with the selected file
+        _run_meo_app(Path(selected_file))
     else:
         console.print("[dim]No file selected[/dim]")
+
+
+def _run_meo_app(source_file: Path):
+    """Launch the main MEO TUI app for editing"""
+    from meo.tui.app import MeoApp
+    from meo.models.project import ProjectState
+    from meo.core.sidecar import load_sidecar
+    import hashlib
+
+    # Load or create project state
+    state = load_sidecar(source_file)
+    if state is None:
+        # Create new state
+        content = source_file.read_text()
+        state = ProjectState(
+            source_file=str(source_file),
+            source_hash=hashlib.md5(content.encode()).hexdigest(),
+        )
+
+    # Run the app
+    app = MeoApp(source_file, state)
+    result = app.run()
+
+    if result:
+        console.print(f"[green]{result}[/green]")
 
 
 @app.command()
