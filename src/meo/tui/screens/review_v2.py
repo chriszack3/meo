@@ -14,7 +14,7 @@ from textual.widgets import Static, TextArea, Footer
 from meo.models.session import Session
 from meo.core.session import save_session
 from meo.core.chunk_parser import parse_chunk_file, ChunkData
-from meo.core.text_replacer import apply_chunk_to_working
+from meo.core.text_replacer import apply_chunk_to_working, apply_chunk_to_file
 from meo.core.git_ops import commit_chunk_response
 
 
@@ -337,6 +337,14 @@ class ReviewScreenV2(Screen):
             self.notify("Failed to apply: original text not found", severity="error")
             return
 
+        # Also apply to original source file
+        source_path = Path(self.session.source_file)
+        apply_chunk_to_file(
+            source_path,
+            chunk.chunk_data.original_text,
+            chunk.chunk_data.ai_response or ""
+        )
+
         # Commit the change
         try:
             commit_chunk_response(self.session_path, chunk.chunk_id)
@@ -381,14 +389,32 @@ class ReviewScreenV2(Screen):
             self._update_display()
 
     def _show_completion(self) -> None:
-        """Show completion summary and exit"""
+        """Show completion summary and return to SelectionScreen"""
+        from meo.tui.screens.selection import SelectionScreen
+        from meo.core.sidecar import load_sidecar, save_sidecar
+
         applied = len(self.session.applied_chunks)
         skipped = len(self.session.skipped_chunks)
 
         self.session.status = "complete"
         save_session(self.session, self.session_path)
 
-        self.app.exit(message=f"Review complete! Applied: {applied}, Skipped: {skipped}")
+        # Get source file path and reload updated content
+        source_path = Path(self.session.source_file)
+        updated_content = source_path.read_text()
+
+        # Reload ProjectState from sidecar and clear reviewed chunks
+        state = load_sidecar(source_path)
+        if state:
+            state.chunks = []
+            save_sidecar(source_path, state)
+
+        # Notify user of results
+        self.notify(f"Review complete! Applied: {applied}, Skipped: {skipped}")
+
+        # Return to SelectionScreen with updated content
+        self.app.pop_screen()
+        self.app.push_screen(SelectionScreen(source_path, updated_content, state))
 
     # ========== Inline Editing ==========
 

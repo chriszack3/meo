@@ -76,6 +76,35 @@ def find_and_replace_text(
     return new_content, True
 
 
+def apply_chunk_to_file(
+    file_path: Path,
+    original_text: str,
+    replacement_text: str
+) -> bool:
+    """Replace original_text with replacement_text in any file.
+
+    Generic version of apply_chunk_to_working() that works with any file path.
+
+    Args:
+        file_path: Path to the file to modify
+        original_text: The original text to find and replace
+        replacement_text: The text to insert
+
+    Returns:
+        True if replacement successful, False if file doesn't exist or text not found
+    """
+    if not file_path.exists():
+        return False
+
+    content = file_path.read_text()
+    new_content, success = find_and_replace_text(content, original_text, replacement_text)
+
+    if success:
+        file_path.write_text(new_content)
+
+    return success
+
+
 def validate_text_exists(content: str, expected_text: str) -> bool:
     """Check if expected text exists in content.
 

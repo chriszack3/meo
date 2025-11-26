@@ -2,43 +2,7 @@ version: '1.0'
 source_file: /root/thinking/test_docs/sample.md
 source_hash: f9f100acf76f06e36c6abeb46bb5e8d3
 created_at: '2025-11-26T17:52:45.595607'
-modified_at: '2025-11-26T18:40:35.263101'
-chunks:
-- id: chunk_001
-  range:
-    start:
-      row: 1
-      col: 0
-    end:
-      row: 3
-      col: 0
-  category: change_entirely
-  original_text: '
-
-    This is the introduction paragraph. It explains what this document is about and
-    sets the context for the reader.
-
-    '
-  direction_preset: expand
-  annotation: make this twice the length
-  execution_order: null
-- id: chunk_002
-  range:
-    start:
-      row: 5
-      col: 0
-    end:
-      row: 7
-      col: 0
-  category: edit
-  original_text: '
-
-    This section contains some important information that might need editing. The
-    content here is detailed but could be clearer.
-
-    '
-  direction_preset: casualize
-  annotation: adopt an urban tone
-  execution_order: null
+modified_at: '2025-11-26T18:52:31.448744'
+chunks: []
 output_file: null
 last_generated_at: null
