@@ -13,6 +13,7 @@ from textual.message import Message
 from meo.models.project import ProjectState
 from meo.models.chunk import Chunk
 from meo.presets import BUILTIN_PRESETS
+from meo.tui.widgets import GenerateConfirmModal
 
 
 class DirectionsScreen(Screen):
@@ -165,7 +166,14 @@ class DirectionsScreen(Screen):
             )
             return
 
-        self.app.generate_edit_and_review()
+        # Show confirmation modal with chunk IDs
+        chunk_ids = [c.id for c in self.chunks]
+
+        def handle_confirm(confirmed: bool) -> None:
+            if confirmed:
+                self.app.generate_edit_and_review()
+
+        self.app.push_screen(GenerateConfirmModal(chunk_ids), handle_confirm)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses"""

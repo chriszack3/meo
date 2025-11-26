@@ -13,6 +13,7 @@ from textual.widgets import Static, TextArea, Footer, ListView, ListItem, Label,
 from meo.models.project import ProjectState
 from meo.models.chunk import Chunk, ChunkCategory, TextRange, Location
 from meo.presets import BUILTIN_PRESETS
+from meo.tui.widgets import GenerateConfirmModal
 
 
 class SelectionMode(Enum):
@@ -342,8 +343,14 @@ class SelectionScreen(Screen):
             self.notify("No chunks defined", severity="warning")
             return
 
-        # Use the full end-to-end flow: generate -> AI edit -> review
-        self.app.generate_edit_and_review()
+        # Show confirmation modal with chunk IDs
+        chunk_ids = [c.id for c in self.state.chunks]
+
+        def handle_confirm(confirmed: bool) -> None:
+            if confirmed:
+                self.app.generate_edit_and_review()
+
+        self.app.push_screen(GenerateConfirmModal(chunk_ids), handle_confirm)
 
     # ========== Chunk List Interaction ==========
 

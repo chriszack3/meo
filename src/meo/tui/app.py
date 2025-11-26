@@ -167,10 +167,9 @@ class MeoApp(App):
         self.exit(message=f"Generated: {output_path}")
 
     def generate_edit_and_review(self) -> None:
-        """Generate chunks, run AI edit, and show review screen."""
+        """Generate chunks, run AI edit with progress, and show review screen."""
         from meo.core.session import create_session, get_session_path
-        from meo.core.ai_edit import run_ai_edit_on_session
-        from meo.tui.screens.review import ReviewScreen
+        from meo.tui.screens.processing import ProcessingScreen
 
         # 1. Generate session + chunks
         self.notify("Generating session...")
@@ -180,10 +179,6 @@ class MeoApp(App):
         # 2. Save sidecar
         save_sidecar(self.source_file, self.state)
 
-        # 3. Run AI edit on all chunks
-        self.notify("Running AI edit on chunks...")
-        run_ai_edit_on_session(session.id)
-
-        # 4. Push review screen
+        # 3. Push processing screen (handles AI edit and transitions to review)
         self.pop_screen()
-        self.push_screen(ReviewScreen(session, session_path))
+        self.push_screen(ProcessingScreen(session, session_path))
