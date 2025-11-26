@@ -1,21 +1,26 @@
 """CLI interface for MEO using Typer"""
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from meo import __version__
-from meo.core.sidecar import load_sidecar, save_sidecar, create_new_project, get_sidecar_path
-from meo.core.output_generator import generate_output, save_output
+from meo.core.config import (
+    load_config,
+    create_config,
+    config_exists,
+    get_config_path,
+    ConfigNotFoundError,
+    ConfigInvalidError,
+)
 from meo.presets import BUILTIN_PRESETS
 
 app = typer.Typer(
     name="meo",
     help="Markdown Edit Orchestrator - TUI tool for structured markdown editing",
-    no_args_is_help=True,
+    invoke_without_command=True,
 )
 console = Console()
 
@@ -26,127 +31,129 @@ def version_callback(value: bool):
         raise typer.Exit()
 
 
-@app.callback()
-def main_callback(
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False, "--version", "-v", callback=version_callback, help="Show version"
     ),
 ):
-    """MEO - Markdown Edit Orchestrator"""
-    pass
+    """MEO - Markdown Edit Orchestrator
+
+    Run without arguments to launch the file picker TUI.
+    """
+    # If a subcommand was invoked, don't run the default behavior
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # Default behavior: launch file picker
+    _run_file_picker()
+
+
+def _run_file_picker():
+    """Load config and launch file picker TUI"""
+    from textual.app import App
+    from meo.tui.screens.file_picker import FilePickerScreen
+
+    # Load config
+    try:
+        config = load_config()
+    except ConfigNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    except ConfigInvalidError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    # Validate folder exists
+    if not config.folder_path.exists():
+        console.print(f"[red]Error:[/red] Folder does not exist: {config.folder}")
+        console.print("Update the folder path in .meo/config.yaml")
+        raise typer.Exit(1)
+
+    # Check for markdown files
+    files = config.get_markdown_files()
+    if not files:
+        console.print(f"[yellow]No .md files found in:[/yellow] {config.folder}")
+        raise typer.Exit(1)
+
+    # Create and run a minimal app with file picker
+    class FilePickerApp(App):
+        CSS = """
+        Screen {
+            background: $surface;
+        }
+        #header {
+            padding: 1 2;
+        }
+        #help {
+            padding: 0 2;
+            color: $text-muted;
+        }
+        #file-list {
+            margin: 1 2;
+            height: 1fr;
+        }
+        """
+
+        def on_mount(self):
+            self.push_screen(FilePickerScreen(config))
+
+    app_instance = FilePickerApp()
+    selected_file = app_instance.run()
+
+    if selected_file:
+        console.print(f"[green]Selected:[/green] {selected_file}")
+        # Placeholder for next phase - will launch selection screen here
+    else:
+        console.print("[dim]No file selected[/dim]")
 
 
 @app.command()
-def edit(
-    file: Path = typer.Argument(..., help="Markdown file to edit", exists=True),
-    resume: bool = typer.Option(False, "--continue", "-c", help="Resume from existing sidecar"),
-):
-    """Open markdown file in the TUI editor"""
-    from meo.tui.app import MeoApp
+def init():
+    """Create .meo/config.yaml configuration file"""
+    if config_exists():
+        if not typer.confirm("Config file already exists. Overwrite?"):
+            raise typer.Exit(0)
 
-    # Load or create project state
-    if resume:
-        state = load_sidecar(file)
-        if state is None:
-            console.print("[yellow]No existing sidecar found, starting fresh[/yellow]")
-            state = create_new_project(file)
-    else:
-        existing = load_sidecar(file)
-        if existing and existing.chunks:
-            if not typer.confirm(
-                f"Found existing sidecar with {len(existing.chunks)} chunks. Overwrite?"
-            ):
-                state = existing
-            else:
-                state = create_new_project(file)
-        else:
-            state = create_new_project(file)
+    console.print("[bold]MEO Configuration Setup[/bold]\n")
 
-    # Launch TUI
-    tui_app = MeoApp(file, state)
-    tui_app.run()
+    # Get folder path
+    folder = typer.prompt(
+        "Enter absolute path to folder containing markdown files",
+        default=str(Path.cwd()),
+    )
 
-
-@app.command()
-def generate(
-    file: Path = typer.Argument(..., help="Markdown file with existing sidecar", exists=True),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
-):
-    """Generate output file from existing sidecar (no TUI)"""
-    state = load_sidecar(file)
-    if state is None:
-        console.print("[red]No sidecar file found. Run 'meo edit' first.[/red]")
+    # Validate it's absolute
+    folder_path = Path(folder)
+    if not folder_path.is_absolute():
+        console.print("[red]Error:[/red] Path must be absolute")
         raise typer.Exit(1)
 
-    if not state.chunks:
-        console.print("[yellow]No chunks defined in sidecar.[/yellow]")
+    # Validate folder exists
+    if not folder_path.exists():
+        console.print(f"[red]Error:[/red] Folder does not exist: {folder}")
         raise typer.Exit(1)
 
-    actionable = state.get_chunks_needing_direction()
-    if not actionable:
-        console.print("[yellow]No chunks needing directions.[/yellow]")
+    if not folder_path.is_dir():
+        console.print(f"[red]Error:[/red] Path is not a directory: {folder}")
         raise typer.Exit(1)
 
-    output_path = save_output(state, file, output)
-    save_sidecar(file, state)
+    # Create config
+    try:
+        config = create_config(folder)
+        console.print(f"\n[green]Created:[/green] {get_config_path()}")
+        console.print(f"[dim]Folder:[/dim] {config.folder}")
 
-    console.print(f"[green]Generated:[/green] {output_path}")
-    console.print(f"Tasks: {len(actionable)}")
+        # Show how many files found
+        files = config.get_markdown_files()
+        console.print(f"[dim]Found {len(files)} .md file(s)[/dim]")
 
+        console.print("\nRun [bold]meo[/bold] to start editing.")
 
-# Sidecar subcommands
-sidecar_app = typer.Typer(help="Manage sidecar files")
-app.add_typer(sidecar_app, name="sidecar")
-
-
-@sidecar_app.command("show")
-def sidecar_show(
-    file: Path = typer.Argument(..., help="Markdown file", exists=True),
-):
-    """Display sidecar contents"""
-    state = load_sidecar(file)
-    if state is None:
-        console.print("[yellow]No sidecar file found.[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error creating config:[/red] {e}")
         raise typer.Exit(1)
-
-    console.print(f"[bold]Source:[/bold] {state.source_file}")
-    console.print(f"[bold]Created:[/bold] {state.created_at}")
-    console.print(f"[bold]Modified:[/bold] {state.modified_at}")
-    console.print(f"[bold]Chunks:[/bold] {len(state.chunks)}")
-    console.print()
-
-    if state.chunks:
-        table = Table(title="Chunks")
-        table.add_column("ID", style="cyan")
-        table.add_column("Category", style="green")
-        table.add_column("Direction")
-        table.add_column("Preview")
-
-        for chunk in state.chunks:
-            preview = chunk.original_text[:40].replace("\n", " ")
-            if len(chunk.original_text) > 40:
-                preview += "..."
-            table.add_row(
-                chunk.id,
-                chunk.category.value,
-                chunk.direction_preset or "-",
-                preview,
-            )
-
-        console.print(table)
-
-
-@sidecar_app.command("clear")
-def sidecar_clear(
-    file: Path = typer.Argument(..., help="Markdown file", exists=True),
-):
-    """Remove sidecar file"""
-    sidecar_path = get_sidecar_path(file)
-    if sidecar_path.exists():
-        sidecar_path.unlink()
-        console.print(f"[green]Removed:[/green] {sidecar_path}")
-    else:
-        console.print("[yellow]No sidecar file found.[/yellow]")
 
 
 # Presets subcommands
@@ -169,6 +176,7 @@ def presets_list():
 
 
 def main():
+    """Entry point for CLI"""
     app()
 
 

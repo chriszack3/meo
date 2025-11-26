@@ -3,9 +3,10 @@
 TUI tool for structured markdown editing. Generates AI-consumable edit instructions.
 
 ## Workflow
-1. Selection TUI: mark chunks, assign categories (edit/change/tweak/leave)
-2. Directions TUI: assign action presets (expand/condense/clarify/etc) + annotations
-3. Generate output.md: plain-language instructions for any AI
+1. Run `meo` → file picker TUI shows .md files from configured folder
+2. Select file → (next phase: chunk editing)
+3. Directions TUI: assign action presets (expand/condense/clarify/etc) + annotations
+4. Generate output.md: plain-language instructions for any AI
 
 ## Key Abstractions
 - **Chunk**: Text range + category + direction + annotation
@@ -18,13 +19,17 @@ TUI tool for structured markdown editing. Generates AI-consumable edit instructi
 - `src/meo/core/` - Output generator, sidecar I/O
 - `src/meo/presets/` - Built-in direction presets
 
+## Config
+Config file: `.meo/config.yaml` in current directory
+```yaml
+folder: /absolute/path/to/markdown/files
+```
+
 ## CLI Commands
 ```bash
-meo edit <file.md>           # Full TUI workflow
-meo edit <file.md> --continue # Resume from sidecar
-meo generate <file.md>        # Output without TUI
-meo sidecar <file.md> show    # View sidecar
-meo presets list              # List direction presets
+meo              # Launch file picker TUI (no arguments)
+meo init         # Create .meo/config.yaml interactively
+meo presets list # List direction presets
 ```
 
 ## Output Format
