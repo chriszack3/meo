@@ -200,6 +200,88 @@ def presets_list():
     console.print(table)
 
 
+@app.command("sessions")
+def sessions_list():
+    """List all editing sessions"""
+    from meo.core.session import list_sessions, load_session
+
+    sessions = list_sessions()
+    if not sessions:
+        console.print("[yellow]No sessions found[/yellow]")
+        return
+
+    table = Table(title="Editing Sessions")
+    table.add_column("ID", style="cyan")
+    table.add_column("Source File")
+    table.add_column("Status")
+    table.add_column("Progress")
+
+    for sid in sessions:
+        session = load_session(sid)
+        if session:
+            total = len(session.chunks)
+            applied = len(session.applied_chunks)
+            skipped = len(session.skipped_chunks)
+            progress = f"{applied + skipped}/{total} ({applied} applied, {skipped} skipped)"
+            source_name = Path(session.source_file).name
+            table.add_row(sid, source_name, session.status, progress)
+
+    console.print(table)
+
+
+@app.command()
+def review(
+    session_id: str = typer.Argument(..., help="Session ID to review"),
+):
+    """Review AI responses and apply approved changes.
+
+    Launch the review TUI to step through each chunk's AI response,
+    compare with original text, and approve or reject changes.
+    """
+    from meo.core.session import load_session, get_session_path, list_sessions
+
+    # Load session
+    session = load_session(session_id)
+    if session is None:
+        console.print(f"[red]Error:[/red] Session not found: {session_id}")
+        available = list_sessions()
+        if available:
+            console.print("\nAvailable sessions:")
+            for sid in available:
+                console.print(f"  - {sid}")
+        raise typer.Exit(1)
+
+    session_path = get_session_path(session_id)
+
+    # Validate session state
+    if session.status not in ("editing", "reviewing"):
+        console.print(f"[yellow]Warning:[/yellow] Session status is '{session.status}'")
+
+    # Check for pending chunks
+    pending = session.get_pending_chunks()
+    if not pending:
+        console.print("[green]All chunks have been reviewed![/green]")
+        console.print(f"Applied: {len(session.applied_chunks)}, Skipped: {len(session.skipped_chunks)}")
+        raise typer.Exit(0)
+
+    console.print(f"[dim]Session: {session_id}[/dim]")
+    console.print(f"[dim]Pending chunks: {len(pending)}[/dim]")
+
+    # Launch review TUI
+    _run_review_app(session, session_path)
+
+
+def _run_review_app(session, session_path: Path):
+    """Launch the review TUI app"""
+    from meo.tui.screens.review import ReviewApp
+
+    app_instance = ReviewApp(session, session_path)
+    result = app_instance.run()
+
+    if result:
+        console.print(f"[green]{result}[/green]")
+
+
 def main():
     """Entry point for CLI"""
     app()

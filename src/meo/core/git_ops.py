@@ -88,3 +88,23 @@ def get_commit_count(session_path: Path) -> int:
     """Get the number of commits in the session repo."""
     result = run_git(session_path, "rev-list", "--count", "HEAD")
     return int(result.stdout.strip())
+
+
+def has_uncommitted_changes(session_path: Path) -> bool:
+    """Check if there are uncommitted changes in working.md"""
+    try:
+        result = run_git(session_path, "status", "--porcelain", "working.md")
+        return bool(result.stdout.strip())
+    except subprocess.CalledProcessError:
+        return False
+
+
+def get_original_vs_working_diff(session_path: Path) -> str:
+    """Get diff between original.md and working.md"""
+    result = subprocess.run(
+        ["diff", "-u", "original.md", "working.md"],
+        cwd=session_path,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout

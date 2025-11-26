@@ -188,3 +188,18 @@ def list_sessions() -> List[str]:
         return []
 
     return [d.name for d in sessions_dir.iterdir() if d.is_dir() and (d / "session.yaml").exists()]
+
+
+def update_session_status(session_id: str, status: str) -> None:
+    """Update a session's status"""
+    session = load_session(session_id)
+    if session:
+        session.status = status
+        session_path = get_session_path(session_id)
+        save_session(session, session_path)
+
+
+def get_chunk_file_path(session_id: str, chunk_id: str) -> Path:
+    """Get the path to a chunk's atomic file"""
+    session_path = get_session_path(session_id)
+    return session_path / "chunks" / f"{chunk_id}.md"

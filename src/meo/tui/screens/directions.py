@@ -165,7 +165,7 @@ class DirectionsScreen(Screen):
             )
             return
 
-        self.app.generate_and_exit()
+        self.app.generate_edit_and_review()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses"""

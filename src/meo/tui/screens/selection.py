@@ -342,14 +342,8 @@ class SelectionScreen(Screen):
             self.notify("No chunks defined", severity="warning")
             return
 
-        # Import here to avoid circular imports
-        from meo.core.session import create_session
-
-        try:
-            session = create_session(self.source_file, self.state)
-            self.app.exit(message=f"Session created: .meo/sessions/{session.id}")
-        except Exception as e:
-            self.notify(f"Error: {e}", severity="error")
+        # Use the full end-to-end flow: generate -> AI edit -> review
+        self.app.generate_edit_and_review()
 
     # ========== Chunk List Interaction ==========
 
