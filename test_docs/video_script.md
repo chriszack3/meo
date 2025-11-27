@@ -7,11 +7,11 @@ SECTION 1: OPEN (0:00-0:12)
 "We turn this:"
 [Screen recording: clicking through an anonymized folder of loosely organized case files]
 
-“Into this:”
+"Into this."
 [Screen recording: timeline visualization with case events]
 [Silent for 2-3 seconds.]
 
-"Click anything."
+"Now watch—click anything."
 [Cursor moves to the timeline, hovers over an event marker]
 "Any event on this timeline—"
 [Click. Document opens.]

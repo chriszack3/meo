@@ -12,7 +12,7 @@ from textual.widgets import Static, TextArea, Footer, ListView, ListItem, Label,
 
 from meo.models.project import ProjectState
 from meo.models.chunk import Chunk, ChunkCategory, LockType, TextRange, Location
-from meo.presets import BUILTIN_PRESETS
+from meo.presets import REPLACE_PRESETS, TWEAK_PRESETS
 from meo.tui.widgets import GenerateConfirmModal
 
 
@@ -153,14 +153,11 @@ class SelectionScreen(Screen):
         """Initialize the editor and lists"""
         # Populate action list
         action_list = self.query_one("#action-list", ListView)
-        action_list.append(ActionListItem("Replace", ChunkCategory.REPLACE, "Edit or rewrite this text"))
-        action_list.append(ActionListItem("Tweak", ChunkCategory.TWEAK, "Minor adjustments only"))
-        action_list.append(ActionListItem("Lock", ChunkCategory.LOCK, "Use as context for other chunks"))
+        action_list.append(ActionListItem("Replace", ChunkCategory.REPLACE, "Rewrite this text"))
+        action_list.append(ActionListItem("Tweak", ChunkCategory.TWEAK, "Minor adjustments"))
+        action_list.append(ActionListItem("Lock", ChunkCategory.LOCK, "Context for other chunks"))
 
-        # Populate direction list
-        direction_list = self.query_one("#direction-list", ListView)
-        for preset in BUILTIN_PRESETS:
-            direction_list.append(DirectionListItem(preset.id, preset.name, preset.description))
+        # Direction list is populated dynamically based on action (Replace vs Tweak)
 
         # Populate lock type list
         lock_type_list = self.query_one("#lock-type-list", ListView)
@@ -174,6 +171,15 @@ class SelectionScreen(Screen):
         # Focus editor
         editor = self.query_one("#editor", TextArea)
         editor.focus()
+
+    def _populate_direction_list(self, category: ChunkCategory) -> None:
+        """Populate direction list based on chunk category"""
+        direction_list = self.query_one("#direction-list", ListView)
+        direction_list.clear()
+
+        presets = REPLACE_PRESETS if category == ChunkCategory.REPLACE else TWEAK_PRESETS
+        for preset in presets:
+            direction_list.append(DirectionListItem(preset.id, preset.name, preset.description))
 
     def _refresh_chunk_list(self) -> None:
         """Refresh the chunk list view"""
@@ -315,7 +321,8 @@ class SelectionScreen(Screen):
             self.mode = SelectionMode.SELECTING_LOCK_TYPE
             self._show_lock_type_panel()
         else:
-            # Replace/Tweak go to direction selection
+            # Replace/Tweak go to direction selection with category-specific presets
+            self._populate_direction_list(self.pending_chunk.category)
             self.mode = SelectionMode.SELECTING_DIRECTION
             self._show_direction_panel()
 
@@ -338,8 +345,10 @@ class SelectionScreen(Screen):
         direction_list = self.query_one("#direction-list", ListView)
         selected_index = direction_list.index or 0
 
-        if selected_index < len(BUILTIN_PRESETS):
-            self.pending_chunk.direction_preset = BUILTIN_PRESETS[selected_index].id
+        # Get preset from category-specific list
+        presets = REPLACE_PRESETS if self.pending_chunk.category == ChunkCategory.REPLACE else TWEAK_PRESETS
+        if selected_index < len(presets):
+            self.pending_chunk.direction_preset = presets[selected_index].id
 
         # Move to annotation
         self.mode = SelectionMode.ENTERING_ANNOTATION

@@ -131,29 +131,54 @@ def generate_atomic_file(chunk: Chunk, session_path: Path, state: ProjectState) 
 
     lines.append("")
 
-    # Context section - bundle locked chunks in page order
+    # Context section - bundle locked chunks showing document structure
     locked_chunks = [c for c in state.chunks if c.category == ChunkCategory.LOCK]
     locked_chunks.sort(key=lambda c: (c.range.start.row, c.range.start.col))
 
     if locked_chunks:
-        lines.append("## Context from Locked Chunks")
+        # Split into before/after relative to target chunk
+        target_row = chunk.range.start.row
+        before_chunks = [lc for lc in locked_chunks if lc.range.end.row < target_row]
+        after_chunks = [lc for lc in locked_chunks if lc.range.start.row > target_row]
+
+        lines.append("## Document Structure")
         lines.append("")
-        lines.append("The following locked chunks provide context for your edit. Interpret them as follows:")
+        lines.append("Locked chunks shown in document order. Your text appears where marked.")
         lines.append("")
-        lines.append("- **Example**: Your response should match the style, tone, and format of this text")
-        lines.append("- **Reference**: Use the information/facts from this text to inform your edit")
-        lines.append("- **Context**: This is surrounding content for awareness only - no special treatment needed")
+        lines.append("- **Example**: Match the style, tone, and format of this text")
+        lines.append("- **Reference**: Use the information/facts from this text")
+        lines.append("- **Context**: Surrounding content for awareness only")
         lines.append("")
-        for lc in locked_chunks:
-            lock_type_label = {
-                LockType.EXAMPLE: "Example (match this style)",
-                LockType.REFERENCE: "Reference (use this information)",
-                LockType.CONTEXT: "Context (for awareness)",
-            }
+
+        lock_type_label = {
+            LockType.EXAMPLE: "Example",
+            LockType.REFERENCE: "Reference",
+            LockType.CONTEXT: "Context",
+        }
+
+        # Chunks BEFORE target
+        for lc in before_chunks:
             label = lock_type_label.get(lc.lock_type, "Context") if lc.lock_type else "Context"
             lines.append(f"### {lc.id} [{label}]")
             if lc.annotation:
-                lines.append(f"**User's guidance for this chunk:** {lc.annotation}")
+                lines.append(f"**User's guidance:** {lc.annotation}")
+            lines.append("```")
+            lines.append(lc.original_text)
+            lines.append("```")
+            lines.append("")
+
+        # Marker for target position
+        lines.append("═" * 50)
+        lines.append("**⬇ YOUR TEXT TO EDIT APPEARS BELOW ⬇**")
+        lines.append("═" * 50)
+        lines.append("")
+
+        # Chunks AFTER target
+        for lc in after_chunks:
+            label = lock_type_label.get(lc.lock_type, "Context") if lc.lock_type else "Context"
+            lines.append(f"### {lc.id} [{label}]")
+            if lc.annotation:
+                lines.append(f"**User's guidance:** {lc.annotation}")
             lines.append("```")
             lines.append(lc.original_text)
             lines.append("```")
