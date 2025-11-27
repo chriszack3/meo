@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from textual.app import App, ComposeResult
+from textual.app import App
 from textual.binding import Binding
 
 from meo.models.project import ProjectState

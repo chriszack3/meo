@@ -1,66 +1,129 @@
 # MEO - Markdown Edit Orchestrator
 
-TUI tool for structured markdown editing with orchestrated context control.
+TUI tool for AI-assisted markdown editing with atomic chunk processing and git-backed review.
 
-## Full Workflow
+## Quick Start
+
+```bash
+meo init         # Configure markdown folder (creates .meo/config.yaml)
+meo              # Launch the TUI
+```
+
+## Workflow
+
+MEO uses a unified screen with multiple modes:
 
 ```
-Selection → Directions → Generate → AI Edit → Review
+EDITING → SELECTING_ACTION → SELECTING_DIRECTION/LOCK_TYPE → ANNOTATION → PROCESSING → REVIEWING
 ```
 
-1. **Selection TUI** - Mark chunks using arrows/shift/enter
-2. **Directions TUI** - Assign presets + context visibility rules
-3. **Generate** - Per-chunk atomic files (chunk + context + instructions)
-4. **AI Edit** - External AI processes each atomic file
-5. **Review TUI** - Git-based per-chunk diff approval/rejection
-
-## Key Design Principles
-
-- **Atomic outputs**: Each chunk → one self-contained file
-- **Context control**: Chunks can see previous edits or surrounding "leave alone" chunks
-- **Read vs Write**: Context is READ-ONLY, only chunk text gets rewritten
-- **Git-backed**: Original state tracked, responses applied as patches
+1. **Select text** - Use arrow keys + Shift to highlight text
+2. **Press Enter** - Opens action selector
+3. **Choose action** - Replace, Tweak, or Lock
+4. **Choose direction/lock type** - Preset or context type
+5. **Add annotation** - Optional custom guidance (Enter to skip)
+6. **Press 'g'** - Generate session and process with Claude
+7. **Review** - Approve or deny each AI response
 
 ## Chunk Categories
 
-- `edit` - Standard edit
-- `change_entirely` - Complete rewrite
-- `tweak_as_necessary` - Minor adjustments
-- `leave_alone` - Context only (visible to other chunks but not edited)
+| Category | Purpose | Direction Presets |
+|----------|---------|-------------------|
+| **REPLACE** | Complete rewrite | Richer, Tighter, Livelier, Calmer, Elevated, Grounded, Custom |
+| **TWEAK** | Minor adjustments | Flow, Precision, Tone, Custom |
+| **LOCK** | Context for AI (not edited) | N/A - uses Lock Types instead |
 
-## Context Visibility Modes (Step 2)
+## Lock Types
 
-- `none` - Chunk edited in isolation
-- `previous_edited` - See results of prior tasks
-- `surrounding` - See adjacent "leave alone" chunks
-- `full` - See entire document
+Lock chunks provide context to AI without being edited:
 
-## Selection Controls
+| Type | Purpose |
+|------|---------|
+| **Example** | Match this style/format |
+| **Reference** | Use this information |
+| **Context** | Background awareness only |
 
-- Arrow keys - Navigate cursor
-- Shift+Arrow - Extend selection
-- Enter - Mark chunk → select category → confirm
-- Escape - Cancel pending chunk
-- n - Next step (directions)
+## Key Controls
 
-## Project Layout
+### Editing Mode
+| Key | Action |
+|-----|--------|
+| Arrow keys | Navigate cursor |
+| Shift+Arrow | Extend selection |
+| Enter | Confirm selection / Start chunk creation |
+| Escape | Cancel current operation |
+| g | Generate session and start processing |
+| d | Delete selected chunk |
+| q | Quit |
 
-- `src/meo/models/` - Pydantic models (Chunk, Direction, ProjectState)
-- `src/meo/tui/` - Textual screens (selection, directions, review)
-- `src/meo/core/` - Output generator, sidecar I/O, git integration
-- `src/meo/presets/` - Built-in direction presets
-
-## Config
-
-Config file: `.meo/config.yaml` in current directory
-```yaml
-folder: /absolute/path/to/markdown/files
-```
+### Review Mode
+| Key | Action |
+|-----|--------|
+| Left/Right | Toggle between Approve/Deny |
+| Up/Down | Navigate between chunks |
+| Enter | Confirm current choice |
+| e | Edit text in sidebar |
 
 ## CLI Commands
 
 ```bash
-meo              # Launch file picker TUI (no arguments)
+meo              # Launch file picker TUI
 meo init         # Create .meo/config.yaml interactively
-meo presets list # List direction presets
+meo presets list # List available direction presets
+meo sessions     # List all editing sessions with progress
+```
+
+## Session Structure
+
+When you generate, MEO creates:
+
+```
+.meo/sessions/[filename]_[timestamp]/
+  ├── session.yaml      # Session metadata
+  ├── original.md       # Unmodified source
+  ├── working.md        # Modified document (git tracked)
+  ├── .git/             # Change history
+  └── chunks/
+      ├── chunk_001.md  # Atomic file with AI response
+      └── chunk_002.md
+```
+
+## Atomic File Format
+
+Each chunk becomes a self-contained file for AI processing:
+
+```markdown
+# Edit Task: chunk_001
+
+**Category:** Replace
+
+## Instructions
+**Direction:** Richer
+[Preset prompt template]
+**User's additional guidance:** [annotation if provided]
+
+## Document Structure
+[Locked chunks appear here as context]
+
+## Text to Edit
+[Selected text to be rewritten]
+
+## Your Response
+[AI writes response here]
+```
+
+## Config
+
+```yaml
+# .meo/config.yaml
+folder: /absolute/path/to/markdown/files
+```
+
+## Sidecar Files
+
+Chunk definitions are stored alongside source files:
+
+```
+document.md           # Your markdown file
+document.md.meo.yaml  # Chunk definitions (auto-managed)
 ```

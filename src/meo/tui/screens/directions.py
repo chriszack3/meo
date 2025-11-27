@@ -1,14 +1,12 @@
 """Directions screen - Step 2: Assign direction presets and annotations"""
 
 from pathlib import Path
-from typing import Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, Container, VerticalScroll
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Static, Button, TextArea, Footer, RadioSet, RadioButton, Label
-from textual.message import Message
+from textual.widgets import Static, Button, TextArea, Footer, RadioSet, RadioButton
 
 from meo.models.project import ProjectState
 from meo.models.chunk import Chunk

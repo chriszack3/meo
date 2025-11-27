@@ -1,7 +1,7 @@
 """Selection screen - Mark chunks with inline direction assignment"""
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Literal

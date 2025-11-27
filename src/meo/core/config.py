@@ -1,7 +1,6 @@
 """Config loading and saving for MEO"""
 
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from pydantic import ValidationError

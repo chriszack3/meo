@@ -2,7 +2,7 @@ version: '1.0'
 source_file: /root/thinking/test_docs/video_script.md
 source_hash: 75584084fc2468018f8a1a0b2c87dce8
 created_at: '2025-11-27T11:54:54.149073'
-modified_at: '2025-11-27T13:31:27.852062'
+modified_at: '2025-11-27T13:44:41.495188'
 chunks: []
 output_file: null
 last_generated_at: null

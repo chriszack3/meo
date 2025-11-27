@@ -11,16 +11,16 @@ SECTION 1: OPEN (0:00-0:12)
 [Screen recording: timeline visualization with case events]
 [Silent for 2-3 seconds.]
 
-"And what makes this work? Everything is connected."
+"Here's the magic. Everything connects."
 [Cursor moves to the timeline, hovers over an event marker]
 "Click any event—"
 [Click. Document opens.]
-"Straight to the source."
+"Source. Instantly."
 [Hold for 1 second]
 
 SECTION 2: DEMO (0:12-0:38)
 
-Click. PDF opens to the exact page. Hold two seconds.
+[Click. PDF opens to the exact page. Hold two seconds.]
 "Source document. Exact page."
 [Cursor moves to a data point on the graph.]
 "Click any data point—"
