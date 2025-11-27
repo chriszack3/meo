@@ -207,14 +207,47 @@ class ReviewScreenV2(Screen):
         content = self.working_content
         display_text = replacement_text if show_replacement else original_text
 
+        # Try exact match first
         if original_text in content:
             marked_content = content.replace(
                 original_text,
-                f">>> REVIEWING >>>\n{display_text}\n<<< REVIEWING <<<"
+                f">>> REVIEWING >>>\n{display_text}\n<<< REVIEWING <<<",
+                1  # Only replace first occurrence
             )
             return marked_content
 
-        return content
+        # Try normalized match (strip whitespace)
+        normalized_original = original_text.strip()
+        normalized_content = content.replace('\r\n', '\n')
+        if normalized_original and normalized_original in normalized_content:
+            marked_content = normalized_content.replace(
+                normalized_original,
+                f">>> REVIEWING >>>\n{display_text}\n<<< REVIEWING <<<",
+                1
+            )
+            return marked_content
+
+        # Fallback: show document with marker at top indicating chunk not found
+        return f">>> REVIEWING >>> (text location changed)\n{display_text}\n<<< REVIEWING <<<\n\n---\n\n{content}"
+
+    def _find_review_marker_line(self, content: str) -> int:
+        """Find the line number containing the review marker."""
+        lines = content.split('\n')
+        for i, line in enumerate(lines):
+            if '>>> REVIEWING >>>' in line:
+                return i
+        return 0
+
+    def _scroll_to_marker(self) -> None:
+        """Scroll the main text area to show the review marker at the top."""
+        def do_scroll():
+            main_text = self.query_one("#main-text", TextArea)
+            marker_line = self._find_review_marker_line(main_text.text)
+            # Scroll so the marker line is at the top of the viewport
+            main_text.scroll_to(0, marker_line, animate=False)
+
+        # Use call_later to ensure the TextArea has rendered
+        self.call_later(do_scroll)
 
     def _update_display(self) -> None:
         """Update all display elements based on current state"""
@@ -275,6 +308,9 @@ class ReviewScreenV2(Screen):
         else:
             main_text.text = "No chunk data"
             sidebar_text.text = ""
+
+        # Scroll to the review marker (use call_later for proper timing)
+        self._scroll_to_marker()
 
         # Update status bar
         status = self.query_one("#status-bar", Static)
