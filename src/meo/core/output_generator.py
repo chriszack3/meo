@@ -76,9 +76,8 @@ def _generate_task(chunk: Chunk, task_num: int) -> list[str]:
 
     # Category
     category_display = {
-        ChunkCategory.EDIT: "Edit",
-        ChunkCategory.CHANGE_ENTIRELY: "Change Entirely",
-        ChunkCategory.TWEAK: "Tweak as Necessary",
+        ChunkCategory.REPLACE: "Replace",
+        ChunkCategory.TWEAK: "Tweak",
     }
     lines.append(f"**Category:** {category_display.get(chunk.category, chunk.category.value)}")
 
@@ -95,9 +94,7 @@ def _generate_task(chunk: Chunk, task_num: int) -> list[str]:
     lines.append("")
 
     # Text to edit
-    text_label = "Text to Edit" if chunk.category == ChunkCategory.EDIT else "Text to Rewrite"
-    if chunk.category == ChunkCategory.TWEAK:
-        text_label = "Text to Tweak"
+    text_label = "Text to Replace" if chunk.category == ChunkCategory.REPLACE else "Text to Tweak"
 
     lines.append(f"### {text_label}")
     lines.append("```")
@@ -117,10 +114,8 @@ def _generate_task(chunk: Chunk, task_num: int) -> list[str]:
         lines.append(chunk.annotation)
     else:
         # Default instructions by category
-        if chunk.category == ChunkCategory.EDIT:
-            lines.append("Edit this text as appropriate.")
-        elif chunk.category == ChunkCategory.CHANGE_ENTIRELY:
-            lines.append("Completely rewrite this text.")
+        if chunk.category == ChunkCategory.REPLACE:
+            lines.append("Edit or rewrite this text as appropriate.")
         elif chunk.category == ChunkCategory.TWEAK:
             lines.append("Make minor adjustments to improve this text.")
 

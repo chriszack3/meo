@@ -7,10 +7,16 @@ from pydantic import BaseModel, Field
 
 class ChunkCategory(str, Enum):
     """Categories determining how a chunk should be processed"""
-    EDIT = "edit"
-    CHANGE_ENTIRELY = "change_entirely"
-    TWEAK = "tweak_as_necessary"
-    LEAVE_ALONE = "leave_alone"
+    REPLACE = "replace"
+    TWEAK = "tweak"
+    LOCK = "lock"
+
+
+class LockType(str, Enum):
+    """Types for locked chunks - how AI should treat them"""
+    EXAMPLE = "example"      # Match the style/format of this chunk
+    REFERENCE = "reference"  # Use information with discretion on style
+    CONTEXT = "context"      # Background awareness only
 
 
 class Location(BaseModel):
@@ -58,13 +64,16 @@ class Chunk(BaseModel):
     direction_preset: Optional[str] = None
     annotation: Optional[str] = None
 
+    # For locked chunks only
+    lock_type: Optional[LockType] = None
+
     # Execution ordering
     execution_order: Optional[int] = None
 
     @property
     def needs_direction(self) -> bool:
         """Whether this chunk requires a direction assignment"""
-        return self.category != ChunkCategory.LEAVE_ALONE
+        return self.category != ChunkCategory.LOCK
 
     @property
     def display_name(self) -> str:

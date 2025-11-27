@@ -42,21 +42,21 @@ def test_text_range_overlaps():
 
 def test_chunk_needs_direction():
     """Test Chunk.needs_direction property"""
-    chunk_edit = Chunk(
+    chunk_replace = Chunk(
         id="test",
         range=TextRange(start=Location(row=0, col=0), end=Location(row=0, col=10)),
-        category=ChunkCategory.EDIT,
+        category=ChunkCategory.REPLACE,
         original_text="test",
     )
-    chunk_leave = Chunk(
+    chunk_lock = Chunk(
         id="test2",
         range=TextRange(start=Location(row=1, col=0), end=Location(row=1, col=10)),
-        category=ChunkCategory.LEAVE_ALONE,
+        category=ChunkCategory.LOCK,
         original_text="test",
     )
 
-    assert chunk_edit.needs_direction
-    assert not chunk_leave.needs_direction
+    assert chunk_replace.needs_direction
+    assert not chunk_lock.needs_direction
 
 
 def test_project_state_next_chunk_id():
@@ -69,7 +69,7 @@ def test_project_state_next_chunk_id():
         Chunk(
             id="chunk_001",
             range=TextRange(start=Location(row=0, col=0), end=Location(row=0, col=10)),
-            category=ChunkCategory.EDIT,
+            category=ChunkCategory.REPLACE,
             original_text="test",
         )
     )

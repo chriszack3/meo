@@ -12,7 +12,11 @@ SECTION 1: OPEN (0:00-0:12)
 [Silent for 2-3 seconds.]
 
 "Click anything."
-[Cursor moves to the timeline]
+[Cursor moves to the timeline, hovers over an event marker]
+"Any event on this timeline—"
+[Click. Document opens.]
+"Straight to the source."
+[Hold for 1 second]
 
 SECTION 2: DEMO (0:12-0:38)
 

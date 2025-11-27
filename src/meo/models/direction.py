@@ -15,7 +15,7 @@ class DirectionPreset(BaseModel):
         """Render the full instruction with optional annotation"""
         result = self.prompt_template
         if annotation:
-            result += f"\n\nAdditional guidance: {annotation}"
+            result += f"\n\n**User's additional guidance:** {annotation}"
         return result
 
 

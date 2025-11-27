@@ -8,7 +8,7 @@ import yaml
 
 from meo.models.session import Session
 from meo.models.project import ProjectState
-from meo.models.chunk import Chunk, ChunkCategory
+from meo.models.chunk import Chunk, ChunkCategory, LockType
 from meo.core.git_ops import init_session_repo
 from meo.presets import get_preset_by_id
 
@@ -44,11 +44,11 @@ def create_session(source_file: Path, state: ProjectState) -> Session:
     session_id = generate_session_id(source_file)
     session_path = get_session_path(session_id)
 
-    # Get chunks in execution order (all chunks, not just actionable)
-    all_chunks = state.chunks
-    chunk_ids = [c.id for c in all_chunks]
+    # Only non-locked chunks get processed - locked chunks are bundled as context
+    actionable_chunks = [c for c in state.chunks if c.category != ChunkCategory.LOCK]
+    chunk_ids = [c.id for c in actionable_chunks]
 
-    # Create session object
+    # Create session object with only actionable chunk IDs
     session = Session(
         id=session_id,
         source_file=str(source_file.absolute()),
@@ -59,8 +59,9 @@ def create_session(source_file: Path, state: ProjectState) -> Session:
     # Initialize git repo with source file
     init_session_repo(session_path, source_file)
 
-    # Generate atomic files for each chunk
-    for chunk in all_chunks:
+    # Generate atomic files ONLY for non-locked chunks
+    # Locked chunks are bundled as context into these files
+    for chunk in actionable_chunks:
         generate_atomic_file(chunk, session_path, state)
 
     # Save session metadata
@@ -74,12 +75,15 @@ def create_session(source_file: Path, state: ProjectState) -> Session:
 
 
 def generate_atomic_file(chunk: Chunk, session_path: Path, state: ProjectState) -> Path:
-    """Generate a single atomic file for a chunk.
+    """Generate a single atomic file for a non-locked chunk.
+
+    Note: This function is only called for REPLACE/TWEAK chunks.
+    Locked chunks are bundled as context into these files.
 
     Args:
-        chunk: The chunk to generate a file for
+        chunk: The chunk to generate a file for (must be non-locked)
         session_path: Path to the session directory
-        state: Full project state (for context chunks)
+        state: Full project state (for gathering locked chunks as context)
 
     Returns:
         Path to the generated file
@@ -98,10 +102,8 @@ def generate_atomic_file(chunk: Chunk, session_path: Path, state: ProjectState) 
 
     # Category
     category_display = {
-        ChunkCategory.EDIT: "Edit",
-        ChunkCategory.CHANGE_ENTIRELY: "Change Entirely",
-        ChunkCategory.TWEAK: "Tweak as Necessary",
-        ChunkCategory.LEAVE_ALONE: "Context Only (Leave Alone)",
+        ChunkCategory.REPLACE: "Replace",
+        ChunkCategory.TWEAK: "Tweak",
     }
     lines.append(f"**Category:** {category_display.get(chunk.category, chunk.category.value)}")
     lines.append("")
@@ -117,24 +119,45 @@ def generate_atomic_file(chunk: Chunk, session_path: Path, state: ProjectState) 
             lines.append("")
             lines.append(preset.render(chunk.annotation))
         elif chunk.annotation:
-            lines.append(chunk.annotation)
+            lines.append(f"**User's guidance:** {chunk.annotation}")
     elif chunk.annotation:
-        lines.append(chunk.annotation)
+        lines.append(f"**User's guidance:** {chunk.annotation}")
     else:
         # Default instructions by category
-        if chunk.category == ChunkCategory.EDIT:
-            lines.append("Edit this text as appropriate.")
-        elif chunk.category == ChunkCategory.CHANGE_ENTIRELY:
-            lines.append("Completely rewrite this text.")
+        if chunk.category == ChunkCategory.REPLACE:
+            lines.append("Edit or rewrite this text as appropriate.")
         elif chunk.category == ChunkCategory.TWEAK:
             lines.append("Make minor adjustments to improve this text.")
-        elif chunk.category == ChunkCategory.LEAVE_ALONE:
-            lines.append("This chunk is for context only. Do not modify.")
 
     lines.append("")
 
-    # Context section (for future use - currently empty)
-    # TODO: Add surrounding leave_alone chunks as context
+    # Context section - bundle locked chunks in page order
+    locked_chunks = [c for c in state.chunks if c.category == ChunkCategory.LOCK]
+    locked_chunks.sort(key=lambda c: (c.range.start.row, c.range.start.col))
+
+    if locked_chunks:
+        lines.append("## Context from Locked Chunks")
+        lines.append("")
+        lines.append("The following locked chunks provide context for your edit. Interpret them as follows:")
+        lines.append("")
+        lines.append("- **Example**: Your response should match the style, tone, and format of this text")
+        lines.append("- **Reference**: Use the information/facts from this text to inform your edit")
+        lines.append("- **Context**: This is surrounding content for awareness only - no special treatment needed")
+        lines.append("")
+        for lc in locked_chunks:
+            lock_type_label = {
+                LockType.EXAMPLE: "Example (match this style)",
+                LockType.REFERENCE: "Reference (use this information)",
+                LockType.CONTEXT: "Context (for awareness)",
+            }
+            label = lock_type_label.get(lc.lock_type, "Context") if lc.lock_type else "Context"
+            lines.append(f"### {lc.id} [{label}]")
+            if lc.annotation:
+                lines.append(f"**User's guidance for this chunk:** {lc.annotation}")
+            lines.append("```")
+            lines.append(lc.original_text)
+            lines.append("```")
+            lines.append("")
 
     # Text to edit
     lines.append("## Text to Edit")
@@ -145,13 +168,12 @@ def generate_atomic_file(chunk: Chunk, session_path: Path, state: ProjectState) 
     lines.append("")
 
     # Response section
-    if chunk.category != ChunkCategory.LEAVE_ALONE:
-        lines.append("## Your Response")
-        lines.append("")
-        lines.append("Write ONLY the edited text below. Do not include explanations or the original text.")
-        lines.append("")
-        lines.append("---")
-        lines.append("")
+    lines.append("## Your Response")
+    lines.append("")
+    lines.append("Write ONLY the edited text below. Do not include explanations or the original text.")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
 
     content = "\n".join(lines)
     file_path.write_text(content)

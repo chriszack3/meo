@@ -11,7 +11,7 @@ from textual.screen import Screen
 from textual.widgets import Static, TextArea, Footer, ListView, ListItem, Label, Input
 
 from meo.models.project import ProjectState
-from meo.models.chunk import Chunk, ChunkCategory, TextRange, Location
+from meo.models.chunk import Chunk, ChunkCategory, LockType, TextRange, Location
 from meo.presets import BUILTIN_PRESETS
 from meo.tui.widgets import GenerateConfirmModal
 
@@ -19,21 +19,35 @@ from meo.tui.widgets import GenerateConfirmModal
 class SelectionMode(Enum):
     """State machine for selection screen"""
     EDITING = "editing"
-    SELECTING_CATEGORY = "selecting_category"
+    SELECTING_ACTION = "selecting_action"
     SELECTING_DIRECTION = "selecting_direction"
+    SELECTING_LOCK_TYPE = "selecting_lock_type"
     ENTERING_ANNOTATION = "entering_annotation"
 
 
-class CategoryListItem(ListItem):
-    """A list item representing a chunk category"""
+class ActionListItem(ListItem):
+    """A list item representing a chunk action (Replace/Tweak/Lock)"""
 
-    def __init__(self, category: ChunkCategory):
+    def __init__(self, action: str, category: ChunkCategory, description: str):
         super().__init__()
+        self.action = action
         self.category = category
+        self.description = description
 
     def compose(self) -> ComposeResult:
-        display_name = self.category.value.replace("_", " ").title()
-        yield Label(display_name)
+        yield Label(f"[bold]{self.action}[/bold] - {self.description}")
+
+
+class LockTypeListItem(ListItem):
+    """A list item representing a lock type"""
+
+    def __init__(self, lock_type: LockType, description: str):
+        super().__init__()
+        self.lock_type = lock_type
+        self.description = description
+
+    def compose(self) -> ComposeResult:
+        yield Label(f"[bold]{self.lock_type.value.title()}[/bold] - {self.description}")
 
 
 class DirectionListItem(ListItem):
@@ -58,17 +72,20 @@ class ChunkListItem(ListItem):
 
     def compose(self) -> ComposeResult:
         category_colors = {
-            ChunkCategory.EDIT: "green",
-            ChunkCategory.CHANGE_ENTIRELY: "yellow",
+            ChunkCategory.REPLACE: "green",
             ChunkCategory.TWEAK: "cyan",
-            ChunkCategory.LEAVE_ALONE: "dim",
+            ChunkCategory.LOCK: "dim",
         }
         color = category_colors.get(self.chunk.category, "white")
         preview = self.chunk.original_text[:20].replace("\n", " ")
         if len(self.chunk.original_text) > 20:
             preview += "..."
-        direction = self.chunk.direction_preset or "none"
-        yield Label(f"[{color}]{self.chunk.id}[/] [{direction}]\n{preview}")
+        # Show direction for replace/tweak, lock_type for locked chunks
+        if self.chunk.category == ChunkCategory.LOCK:
+            detail = self.chunk.lock_type.value if self.chunk.lock_type else "lock"
+        else:
+            detail = self.chunk.direction_preset or "none"
+        yield Label(f"[{color}]{self.chunk.id}[/] [{detail}]\n{preview}")
 
 
 class SelectionScreen(Screen):
@@ -101,7 +118,7 @@ class SelectionScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Static(f"[bold]MEO[/bold]  |  {self.source_file.name}", classes="title")
         yield Static(
-            "[dim]Select[/] → Enter → Category → Direction → Annotation  |  [dim]g[/]=generate  [dim]d[/]=delete  [dim]q[/]=quit",
+            "[dim]Select[/] → Enter → Action → Direction/LockType → Annotation  |  [dim]g[/]=generate  [dim]d[/]=delete  [dim]q[/]=quit",
             classes="help-text",
         )
 
@@ -110,13 +127,17 @@ class SelectionScreen(Screen):
                 yield TextArea(self.content, id="editor", read_only=True)
 
             with Vertical(id="sidebar"):
-                # Category selector (hidden by default)
-                yield Static("[bold]Category[/bold]", id="category-header", classes="hidden")
-                yield ListView(id="category-list", classes="hidden")
+                # Action selector (hidden by default)
+                yield Static("[bold]Action[/bold]", id="action-header", classes="hidden")
+                yield ListView(id="action-list", classes="hidden")
 
                 # Direction selector (hidden by default)
                 yield Static("[bold]Direction[/bold]", id="direction-header", classes="hidden")
                 yield ListView(id="direction-list", classes="hidden")
+
+                # Lock type selector (hidden by default)
+                yield Static("[bold]Lock Type[/bold]", id="lock-type-header", classes="hidden")
+                yield ListView(id="lock-type-list", classes="hidden")
 
                 # Annotation input (hidden by default)
                 yield Static("[bold]Annotation[/bold] (Enter to skip)", id="annotation-header", classes="hidden")
@@ -130,15 +151,22 @@ class SelectionScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialize the editor and lists"""
-        # Populate category list
-        category_list = self.query_one("#category-list", ListView)
-        for cat in ChunkCategory:
-            category_list.append(CategoryListItem(cat))
+        # Populate action list
+        action_list = self.query_one("#action-list", ListView)
+        action_list.append(ActionListItem("Replace", ChunkCategory.REPLACE, "Edit or rewrite this text"))
+        action_list.append(ActionListItem("Tweak", ChunkCategory.TWEAK, "Minor adjustments only"))
+        action_list.append(ActionListItem("Lock", ChunkCategory.LOCK, "Use as context for other chunks"))
 
         # Populate direction list
         direction_list = self.query_one("#direction-list", ListView)
         for preset in BUILTIN_PRESETS:
             direction_list.append(DirectionListItem(preset.id, preset.name, preset.description))
+
+        # Populate lock type list
+        lock_type_list = self.query_one("#lock-type-list", ListView)
+        lock_type_list.append(LockTypeListItem(LockType.EXAMPLE, "Match this style/format"))
+        lock_type_list.append(LockTypeListItem(LockType.REFERENCE, "Use this information"))
+        lock_type_list.append(LockTypeListItem(LockType.CONTEXT, "Background awareness only"))
 
         # Refresh chunk list
         self._refresh_chunk_list()
@@ -179,8 +207,9 @@ class SelectionScreen(Screen):
 
     def _hide_all_sidebar_panels(self) -> None:
         """Hide all sidebar panels"""
-        for widget_id in ["category-header", "category-list", "direction-header",
-                          "direction-list", "annotation-header", "annotation-input",
+        for widget_id in ["action-header", "action-list", "direction-header",
+                          "direction-list", "lock-type-header", "lock-type-list",
+                          "annotation-header", "annotation-input",
                           "chunks-header", "chunks-listview"]:
             self.query_one(f"#{widget_id}").add_class("hidden")
 
@@ -190,14 +219,14 @@ class SelectionScreen(Screen):
         self.query_one("#chunks-header").remove_class("hidden")
         self.query_one("#chunks-listview").remove_class("hidden")
 
-    def _show_category_panel(self) -> None:
-        """Show category selector"""
+    def _show_action_panel(self) -> None:
+        """Show action selector (Replace/Tweak/Lock)"""
         self._hide_all_sidebar_panels()
-        self.query_one("#category-header").remove_class("hidden")
-        category_list = self.query_one("#category-list", ListView)
-        category_list.remove_class("hidden")
-        category_list.index = 0
-        category_list.focus()
+        self.query_one("#action-header").remove_class("hidden")
+        action_list = self.query_one("#action-list", ListView)
+        action_list.remove_class("hidden")
+        action_list.index = 0
+        action_list.focus()
 
     def _show_direction_panel(self) -> None:
         """Show direction selector"""
@@ -207,6 +236,15 @@ class SelectionScreen(Screen):
         direction_list.remove_class("hidden")
         direction_list.index = 0
         direction_list.focus()
+
+    def _show_lock_type_panel(self) -> None:
+        """Show lock type selector"""
+        self._hide_all_sidebar_panels()
+        self.query_one("#lock-type-header").remove_class("hidden")
+        lock_type_list = self.query_one("#lock-type-list", ListView)
+        lock_type_list.remove_class("hidden")
+        lock_type_list.index = 0
+        lock_type_list.focus()
 
     def _show_annotation_panel(self) -> None:
         """Show annotation input"""
@@ -223,15 +261,17 @@ class SelectionScreen(Screen):
         """Handle Enter key based on current mode"""
         if self.mode == SelectionMode.EDITING:
             self._start_chunk_creation()
-        elif self.mode == SelectionMode.SELECTING_CATEGORY:
-            self._confirm_category()
+        elif self.mode == SelectionMode.SELECTING_ACTION:
+            self._confirm_action()
         elif self.mode == SelectionMode.SELECTING_DIRECTION:
             self._confirm_direction()
+        elif self.mode == SelectionMode.SELECTING_LOCK_TYPE:
+            self._confirm_lock_type()
         elif self.mode == SelectionMode.ENTERING_ANNOTATION:
             self._confirm_annotation()
 
     def _start_chunk_creation(self) -> None:
-        """Create pending chunk and switch to category selection mode"""
+        """Create pending chunk and switch to action selection mode"""
         text_range = self._get_selection_range()
         if text_range is None:
             self.notify("No text selected", severity="warning")
@@ -252,24 +292,46 @@ class SelectionScreen(Screen):
         self.pending_chunk = Chunk(
             id=self.state.next_chunk_id(),
             range=text_range,
-            category=ChunkCategory.EDIT,
+            category=ChunkCategory.REPLACE,
             original_text=selected_text,
         )
 
-        self.mode = SelectionMode.SELECTING_CATEGORY
-        self._show_category_panel()
+        self.mode = SelectionMode.SELECTING_ACTION
+        self._show_action_panel()
 
-    def _confirm_category(self) -> None:
-        """Confirm category and move to direction selection"""
-        category_list = self.query_one("#category-list", ListView)
-        selected_index = category_list.index or 0
+    def _confirm_action(self) -> None:
+        """Confirm action and move to direction selection or lock type selection"""
+        action_list = self.query_one("#action-list", ListView)
+        selected_index = action_list.index or 0
 
-        categories = list(ChunkCategory)
-        self.pending_chunk.category = categories[selected_index]
+        # Get the selected action item
+        action_item = action_list.children[selected_index]
+        if isinstance(action_item, ActionListItem):
+            self.pending_chunk.category = action_item.category
 
-        # Move to direction selection
-        self.mode = SelectionMode.SELECTING_DIRECTION
-        self._show_direction_panel()
+        # Branch based on action type
+        if self.pending_chunk.category == ChunkCategory.LOCK:
+            # Lock goes to lock type selection
+            self.mode = SelectionMode.SELECTING_LOCK_TYPE
+            self._show_lock_type_panel()
+        else:
+            # Replace/Tweak go to direction selection
+            self.mode = SelectionMode.SELECTING_DIRECTION
+            self._show_direction_panel()
+
+    def _confirm_lock_type(self) -> None:
+        """Confirm lock type and move to annotation"""
+        lock_type_list = self.query_one("#lock-type-list", ListView)
+        selected_index = lock_type_list.index or 0
+
+        # Get the selected lock type item
+        lock_type_item = lock_type_list.children[selected_index]
+        if isinstance(lock_type_item, LockTypeListItem):
+            self.pending_chunk.lock_type = lock_type_item.lock_type
+
+        # Move to annotation
+        self.mode = SelectionMode.ENTERING_ANNOTATION
+        self._show_annotation_panel()
 
     def _confirm_direction(self) -> None:
         """Confirm direction and move to annotation"""
@@ -310,16 +372,24 @@ class SelectionScreen(Screen):
 
     def key_escape(self) -> None:
         """Handle Escape key - go back one step or cancel"""
-        if self.mode == SelectionMode.SELECTING_CATEGORY:
+        if self.mode == SelectionMode.SELECTING_ACTION:
             self._cancel_chunk_creation()
         elif self.mode == SelectionMode.SELECTING_DIRECTION:
-            # Go back to category
-            self.mode = SelectionMode.SELECTING_CATEGORY
-            self._show_category_panel()
+            # Go back to action
+            self.mode = SelectionMode.SELECTING_ACTION
+            self._show_action_panel()
+        elif self.mode == SelectionMode.SELECTING_LOCK_TYPE:
+            # Go back to action
+            self.mode = SelectionMode.SELECTING_ACTION
+            self._show_action_panel()
         elif self.mode == SelectionMode.ENTERING_ANNOTATION:
-            # Go back to direction
-            self.mode = SelectionMode.SELECTING_DIRECTION
-            self._show_direction_panel()
+            # Go back to direction or lock type depending on category
+            if self.pending_chunk.category == ChunkCategory.LOCK:
+                self.mode = SelectionMode.SELECTING_LOCK_TYPE
+                self._show_lock_type_panel()
+            else:
+                self.mode = SelectionMode.SELECTING_DIRECTION
+                self._show_direction_panel()
 
     def _cancel_chunk_creation(self) -> None:
         """Cancel pending chunk and return to editing"""
@@ -344,8 +414,14 @@ class SelectionScreen(Screen):
             self.notify("No chunks defined", severity="warning")
             return
 
-        # Show confirmation modal with chunk IDs
-        chunk_ids = [c.id for c in self.state.chunks]
+        # Check for at least one non-locked chunk
+        non_locked = [c for c in self.state.chunks if c.category != ChunkCategory.LOCK]
+        if not non_locked:
+            self.notify("Need at least one non-locked chunk", severity="warning")
+            return
+
+        # Show confirmation modal with only non-locked chunk IDs
+        chunk_ids = [c.id for c in non_locked]
 
         def handle_confirm(confirmed: bool) -> None:
             if confirmed:

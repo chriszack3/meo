@@ -93,29 +93,55 @@ class MeoApp(App):
         padding: 1;
     }
 
-    /* Category selector */
-    #category-header {
+    /* Action selector */
+    #action-header {
         text-style: bold;
         color: $accent;
         margin-bottom: 1;
     }
 
-    #category-list {
+    #action-list {
         height: auto;
         max-height: 10;
         border: solid $accent;
         margin-bottom: 1;
     }
 
-    #category-list > ListItem {
+    #action-list > ListItem {
         padding: 0 1;
     }
 
-    #category-list > ListItem:hover {
+    #action-list > ListItem:hover {
         background: $primary 30%;
     }
 
-    #category-list:focus > ListItem.-highlight {
+    #action-list:focus > ListItem.-highlight {
+        background: $accent;
+    }
+
+    /* Lock type selector */
+    #lock-type-header {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    #lock-type-list {
+        height: auto;
+        max-height: 10;
+        border: solid $accent;
+        margin-bottom: 1;
+    }
+
+    #lock-type-list > ListItem {
+        padding: 0 1;
+    }
+
+    #lock-type-list > ListItem:hover {
+        background: $primary 30%;
+    }
+
+    #lock-type-list:focus > ListItem.-highlight {
         background: $accent;
     }
 
