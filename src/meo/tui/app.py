@@ -88,7 +88,7 @@ class MeoApp(App):
 
     /* Sidebar styling */
     #sidebar {
-        width: 30;
+        width: 60;
         border: solid $primary;
         padding: 1;
     }
@@ -149,6 +149,62 @@ class MeoApp(App):
     #chunks-header {
         text-style: bold;
         margin-bottom: 1;
+    }
+
+    /* Processing panel */
+    #processing-header {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    #processing-progress {
+        height: 1;
+        margin-bottom: 1;
+    }
+
+    #processing-status {
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+
+    #processing-stream {
+        height: 1fr;
+        border: solid $secondary;
+        min-height: 10;
+    }
+
+    /* Review panel */
+    #review-header {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    #review-chunk-info {
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+
+    #review-choice-display {
+        margin: 1 0;
+        text-align: center;
+    }
+
+    #review-sidebar-text {
+        height: 1fr;
+        border: solid $secondary;
+        min-height: 10;
+    }
+
+    #review-sidebar-text.editing-mode {
+        border: double $warning;
+    }
+
+    #review-help {
+        color: $text-muted;
+        text-align: center;
+        margin-top: 1;
     }
     """
 

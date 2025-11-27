@@ -11,9 +11,9 @@ SECTION 1: OPEN (0:00-0:12)
 [Screen recording: timeline visualization with case events]
 [Silent for 2-3 seconds.]
 
-"Now watch—click anything."
+"And what makes this work? Everything is connected."
 [Cursor moves to the timeline, hovers over an event marker]
-"Any event on this timeline—"
+"Click any event—"
 [Click. Document opens.]
 "Straight to the source."
 [Hold for 1 second]
